@@ -66,23 +66,40 @@ object IOEffects {
     IO(write(bucket, key, value))
 
   // Example 1: Cats IO, fetch
-  def findRestaurantScala(search: String): Location =
+  def findRestaurantScala(search: String): (Restaurant, Location) =
     ioFetch(restaurantsDataLake, search)
-      .flatMap(restaurant => ioFetch(locationsDataLake, restaurant.area))
+      .flatMap(restaurant =>
+        ioFetch(locationsDataLake, restaurant.area)
+          .map(l => (restaurant, l)))
       .unsafeRunSync()
 
-  // Example 2: Cats IO, fetch and write
-  def findAndReviewRestaurant(search: String): Int = {
-    val program = for {
+  def findRestaurantScala2(search: String): Either[Throwable, (Restaurant, Location)] = {
+    val io = for {
       restaurant <- ioFetch(restaurantsDataLake, search)
       location <- ioFetch(locationsDataLake, restaurant.area)
+    } yield (restaurant, location)
+
+    io.attempt.unsafeRunSync()
+  }
+
+  // Example 2: Cats IO, fetch and write
+  def restaurantQuery(search: String): IO[(Restaurant, Location)] =
+    for {
+      restaurant <- ioFetch(restaurantsDataLake, search)
+      location <- ioFetch(locationsDataLake, restaurant.area)
+    } yield (restaurant, location)
+
+
+  def findAndReview(search: String): Either[Throwable, Int] = {
+    val io = for {
+      (restaurant, location) <- restaurantQuery(search)
       reviewsInserted <-
         if (location.lat > 40)
           ioWrite(reviews, restaurant, "Ugh, it was so far!")
         else 0.pure[IO]
     } yield reviewsInserted
 
-    program.unsafeRunSync()
+    io.attempt.unsafeRunSync()
   }
 
 }
