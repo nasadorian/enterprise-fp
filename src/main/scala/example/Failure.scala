@@ -1,6 +1,6 @@
 import scala.util.Try
 
-object FailureExample {
+object Failure {
 
   // Has an unchecked exception
   def encrypt(text: String, seed: Int): String =

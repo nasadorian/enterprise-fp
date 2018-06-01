@@ -11,7 +11,7 @@ import cats.implicits._
 
 import scala.collection.mutable
 
-object IOExample {
+object IOEffects {
 
   // Retrieving Records from data lake (S3)
   sealed trait Record
@@ -21,7 +21,7 @@ object IOExample {
   val restaurantsDataLake = mutable.Map(
     "soup" -> Restaurant("Soup Place", "Queens"),
     "kabob" -> Restaurant("Babu Bhatt's", "Brooklyn"),
-    "diner" -> Restaurant("Tom's", "Manhattan")
+    "diner" -> Restaurant("Tom's Diner", "Manhattan")
   )
 
   val locationsDataLake = mutable.Map(
@@ -73,17 +73,18 @@ object IOExample {
   def ioWrite[K,Record](bucket: mutable.Map[K, Record], key: K, value: Record): IO[Int] =
     IO(write(bucket, key, value))
 
-//  def findReviewRestaurantScala(search: String): Int = {
-//    val program = for {
-//      restaurant <- ioFetch(restaurantsDataLake, search)
-//      location <- ioFetch(locationsDataLake, restaurant)
-//      reviewInserted <-
-//        if (location.lat > 40)
-//          ioWrite(reviews, restaurant, "Too far")
-//        else 0.pure[IO]
-//    } yield reviewInserted
-//    program.unsafeRunSync()
-//  }
+  def findReviewRestaurantScala(search: String): Int = {
+    val program = for {
+      restaurant <- ioFetch(restaurantsDataLake, search)
+      location <- ioFetch(locationsDataLake, restaurant)
+      reviewInserted <-
+        if (location.lat > 40)
+          ioWrite(reviews, restaurant, "Ugh, so far")
+        else 0.pure[IO]
+    } yield reviewInserted
+
+    program.unsafeRunSync()
+  }
 
   val x = ioWrite(restaurantsDataLake, "cherf", Restaurant("Bb", "sdf"))
 }

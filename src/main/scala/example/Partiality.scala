@@ -1,5 +1,5 @@
 
-object CacheExample {
+object Partiality {
 
   val personLocation = Map(
     "Jerry Seinfeld" -> "Manhattan",
