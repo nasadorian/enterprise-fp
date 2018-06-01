@@ -1,5 +1,7 @@
 package example
 
-object TestPartiality {
+import org.scalatest.FlatSpec
+
+object TestPartiality extends FlatSpec {
 
 }

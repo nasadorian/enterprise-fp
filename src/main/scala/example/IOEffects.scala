@@ -86,7 +86,6 @@ object IOEffects {
     program.unsafeRunSync()
   }
 
-  val x = ioWrite(restaurantsDataLake, "cherf", Restaurant("Bb", "sdf"))
 }
 
 

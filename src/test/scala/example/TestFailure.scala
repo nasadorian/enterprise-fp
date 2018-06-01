@@ -1,5 +1,7 @@
 package example
 
-object TestFailure {
+import org.scalatest.FlatSpec
+
+object TestFailure extends FlatSpec {
 
 }
