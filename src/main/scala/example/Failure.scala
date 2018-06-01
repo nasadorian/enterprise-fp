@@ -69,9 +69,9 @@ object Failure {
 
   // Monad behavior
   def loginScala3(request: AccountRequest): Option[(Granted, User)] = {
-    wrappedEncrypt(request.pw, 10).right
-      .flatMap(e => makeUser(request.u, e)).right
-      .map(user => (Granted(user.name, welcomeMsg(request)), user)).right
+    wrappedEncrypt(request.pw, 10)
+      .flatMap(e => makeUser(request.u, e))
+      .map(user => (Granted(user.name, welcomeMsg(request)), user))
       .toOption
   }
 

@@ -1,3 +1,4 @@
+package example
 
 object Partiality {
 
@@ -10,7 +11,7 @@ object Partiality {
 
   val locationTransit = Map(
     "Manhattan" -> List("J", "Z"),
-    "Brooklyn" -> List("L")
+    "Brooklyn" -> List("L", "G", "K")
   )
 
   // Scala's Map implements get
@@ -48,20 +49,6 @@ object Partiality {
       message = "No stops or user not found!"
     }
     return message
-  }
-
-  sealed trait Option[+A]
-  case object None extends Option[Nothing]
-  case class Some[A](a: A) extends Option[A]
-
-
-  trait Functor[F[_]] {
-    def map[A, B](fa: F[A])(f: A => B): F[B]
-  }
-
-  trait Monad[F[_]] {
-    def pure[A](value: A): F[A]
-    def flatMap[A, B](value: F[A])(func: A => F[B]): F[B]
   }
 
 }
