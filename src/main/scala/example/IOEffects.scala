@@ -85,23 +85,24 @@ object IOEffects {
     } yield (restaurant, coordinates)
 
 
-  // An insert query to write a review
+  // An insert statement to write a review
   def insertReview(restaurant: Restaurant, review: String): IO[Int] =
     for {
       reviews     <- ioFetch(reviewsDatalake, restaurant).value
-      insert      =  reviews.fold(List(review))(review :: _)
+      insert       = reviews.fold(List(review))(review :: _)
       numInserted <- ioWrite(reviewsDatalake, restaurant, insert)
     } yield numInserted
 
+  def lazyReviewer(restaurant: Restaurant, coordinates: Coordinates): IO[Int] =
+    if (coordinates.lat > 40)
+      insertReview(restaurant, "Terrible restaurant, too far from me!")
+    else 0.pure[IO]
 
   //  Bring it all together to search a restaurant then review it
-  def lazyReviewer(search: String, review: String): Either[Throwable, Option[Int]] = {
+  def findAndReview(search: String): Either[Throwable, Option[Int]] = {
     val io: OptionT[IO, Int] = for {
-      (restaurant, location) <- selectRestaurant(search)
-      reviewsInserted <-
-        if (location.lat > 40)
-          insertReview(restaurant, review)
-        else OptionT[IO, Int](IO(Some(0)))
+      (restaurant, coordinates) <- selectRestaurant(search)
+      reviewsInserted           <- OptionT.liftF(lazyReviewer(restaurant, coordinates))
     } yield reviewsInserted
 
     io.value.attempt.unsafeRunSync()
