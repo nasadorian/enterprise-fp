@@ -1,13 +1,8 @@
 package example
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
-import scala.util.{Failure, Success}
-import cats._
-//import cats.data._
 import cats.effect.IO
-import cats.effect.implicits._
 import cats.implicits._
+import cats.data._
 
 import scala.collection.mutable
 
@@ -15,28 +10,30 @@ object IOEffects {
 
   // Retrieving Records from data lake (S3)
   sealed trait Record
-  case class Location(lat: Double, lng: Double) extends Record
-  case class Restaurant(name: String, area: String) extends Record
+  case class Location(name: String) extends Record
+  case class Coordinates(lat: Double, lng: Double) extends Record
+  case class Restaurant(name: String, location: Location) extends Record
 
-  val restaurantsDataLake: mutable.Map[String, Restaurant] = mutable.Map(
-    "soup" -> Restaurant("Soup Place", "Queens"),
-    "kabob" -> Restaurant("Babu Bhatt's", "Brooklyn"),
-    "diner" -> Restaurant("Tom's Diner", "Manhattan")
+  val restaurantsDatalake: mutable.Map[String, Restaurant] = mutable.Map(
+    "soup" -> Restaurant("Soup Place", Location("Queens")),
+    "kabob" -> Restaurant("Babu Bhatt's", Location("Brooklyn")),
+    "diner" -> Restaurant("Tom's Diner", Location("Manhattan"))
   )
 
-  val locationsDataLake: mutable.Map[String, Location] = mutable.Map(
-    "Queens" -> Location(40.10, 74.11),
-    "Brooklyn" -> Location(41.12, 79.00),
-    "Manhattan" -> Location(44.00, 70.26)
+  val locationsDatalake: mutable.Map[Location, Coordinates] = mutable.Map(
+    Location("Queens") -> Coordinates(40.10, 74.11),
+    Location("Brooklyn") -> Coordinates(41.12, 79.00),
+    Location("Manhattan") -> Coordinates(44.00, 70.26)
   )
 
-  val reviews: mutable.Map[Restaurant, String] = mutable.Map(
-    Restaurant("Soup Place", "Queens") -> "The guy was really mean!"
+  val reviewsDatalake: mutable.Map[Restaurant, List[String]] = mutable.Map(
+    Restaurant("Soup Place", Location("Queens")) -> List("Guy at counter was really rude."),
+    Restaurant("Babu Bhatt's", Location("Brooklyn")) -> List("They changed their entire menu!")
   )
 
-  def fetch[K, V](bucket: mutable.Map[K, V], key: K): V = {
+  def fetch[K, V](bucket: mutable.Map[K, V], key: K): Option[V] = {
     Thread.sleep(1000)
-    bucket(key)
+    bucket.get(key)
   }
 
   def write[K, V](bucket: mutable.Map[K, V], key: K, value: V): Int = {
@@ -45,61 +42,88 @@ object IOEffects {
     1
   }
 
-  def findRestaurantJava(search: String): Location = {
+  def findRestaurantJava(search: String): (Restaurant, Coordinates) = {
     var restaurant: Restaurant = null
-    var location: Location = null
+    var coordinates: Coordinates = null
     try {
-      restaurant = fetch(restaurantsDataLake, search)
+      restaurant = fetch(restaurantsDatalake, search).get
       if (restaurant != null) {
-        location = fetch(locationsDataLake, restaurant.area)
+        coordinates = fetch(locationsDatalake, restaurant.location).get
       }
     } catch {
       case e: Exception => println("Fetch failed somewhere... we don't know")
     }
-    location
+    (restaurant, coordinates)
   }
 
-  def ioFetch[K,V](bucket: mutable.Map[K, V], key: K): IO[V] =
-    IO(fetch(bucket, key))
+//  def ioFetch[K,V](bucket: mutable.Map[K, V], key: K): IO[Option[V]] =
+//    IO(fetch(bucket, key))
+//
+//  def ioWrite[K,V](bucket: mutable.Map[K, V], key: K, value: V): IO[Int] =
+//    IO(write(bucket, key, value))
+
+  // Example 1: Cats IO, fetch
+  // Unsafe means "use this at the end of the world"
+
+  // IO[Option[String]] need String -> IO[Option[String]]
+//  def searchRestaurantScala(search: String): Either[Throwable, Option[(Restaurant, Location)]] = {
+//    val io: IO[Option[(Restaurant, Location)]] = for {
+//      restaurantOption <- ioFetch(restaurantsDatalake, search)
+//      restaurant       <- restaurantOption
+//      locationOption   <- ioFetch(locationsDatalake, restaurant.area)
+//      location         <- locationOption
+//    } yield (restaurant, location)
+//
+//    io.attempt.unsafeRunSync()
+//  }
+
+  // In pure FP, the effect and the business logic can be decoupled
+  // i.e. we have composable programs that deal with values first, and we can run their effects later
+  def ioFetch[K,V](dl: mutable.Map[K, V], key: K): OptionT[IO,V] =
+    OptionT[IO,V](IO(fetch(dl, key)))
 
   def ioWrite[K,V](bucket: mutable.Map[K, V], key: K, value: V): IO[Int] =
     IO(write(bucket, key, value))
 
-  // Example 1: Cats IO, fetch
-  def findRestaurantScala(search: String): (Restaurant, Location) =
-    ioFetch(restaurantsDataLake, search)
-      .flatMap(restaurant =>
-        ioFetch(locationsDataLake, restaurant.area)
-          .map(l => (restaurant, l)))
-      .unsafeRunSync()
+  // 2 improvements: for comprehension makes it clearer, and `attempt` gives error handling
+  def searchRestaurants(search: String): Either[Throwable, Option[(Restaurant, Coordinates)]] = {
+    val io: OptionT[IO, (Restaurant, Coordinates)] = for {
+      restaurant <- ioFetch(restaurantsDatalake, search)
+      coordinates <- ioFetch(locationsDatalake, restaurant.location)
+    } yield (restaurant, coordinates)
 
-  def findRestaurantScala2(search: String): Either[Throwable, (Restaurant, Location)] = {
-    val io = for {
-      restaurant <- ioFetch(restaurantsDataLake, search)
-      location <- ioFetch(locationsDataLake, restaurant.area)
-    } yield (restaurant, location)
-
-    io.attempt.unsafeRunSync()
+    io.value.attempt.unsafeRunSync()
   }
 
   // Example 2: Cats IO, fetch and write
-  def restaurantQuery(search: String): IO[(Restaurant, Location)] =
+  // Isolate the query from the last example and reuse it.. composability!
+  def selectRestaurant(search: String): OptionT[IO, (Restaurant, Coordinates)] =
     for {
-      restaurant <- ioFetch(restaurantsDataLake, search)
-      location <- ioFetch(locationsDataLake, restaurant.area)
-    } yield (restaurant, location)
+      restaurant <- ioFetch(restaurantsDatalake, search)
+      coordinates <- ioFetch(locationsDatalake, restaurant.location)
+    } yield (restaurant, coordinates)
 
 
-  def findAndReview(search: String): Either[Throwable, Int] = {
-    val io = for {
-      (restaurant, location) <- restaurantQuery(search)
+  // An insert query to write a review
+  def insertReview(restaurant: Restaurant, review: String): IO[Int] =
+    for {
+      reviews     <- ioFetch(reviewsDatalake, restaurant).value
+      insert      =  reviews.fold(List(review))(review :: _)
+      numInserted <- ioWrite(reviewsDatalake, restaurant, insert)
+    } yield numInserted
+
+
+//  Bring it all together to search a restaurant then review it
+  def findAndReview(search: String): Either[Throwable, Option[Int]] = {
+    val io: OptionT[IO, Int] = for {
+      (restaurant, location) <- selectRestaurant(search)
       reviewsInserted <-
         if (location.lat > 40)
-          ioWrite(reviews, restaurant, "Ugh, it was so far!")
+          insertReview(restaurant, "Ugh, it was so far!")
         else 0.pure[IO]
     } yield reviewsInserted
 
-    io.attempt.unsafeRunSync()
+    io.value.attempt.unsafeRunSync()
   }
 
 }
