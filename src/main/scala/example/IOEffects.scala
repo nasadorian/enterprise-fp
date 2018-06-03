@@ -42,7 +42,7 @@ object IOEffects {
     1
   }
 
-  def findRestaurantJava(search: String): (Restaurant, Coordinates) = {
+  def searchRestaurantsJava(search: String): (Restaurant, Coordinates) = {
     var restaurant: Restaurant = null
     var coordinates: Coordinates = null
     try {
@@ -56,27 +56,8 @@ object IOEffects {
     (restaurant, coordinates)
   }
 
-//  def ioFetch[K,V](bucket: mutable.Map[K, V], key: K): IO[Option[V]] =
-//    IO(fetch(bucket, key))
-//
-//  def ioWrite[K,V](bucket: mutable.Map[K, V], key: K, value: V): IO[Int] =
-//    IO(write(bucket, key, value))
-
   // Example 1: Cats IO, fetch
   // Unsafe means "use this at the end of the world"
-
-  // IO[Option[String]] need String -> IO[Option[String]]
-//  def searchRestaurantScala(search: String): Either[Throwable, Option[(Restaurant, Location)]] = {
-//    val io: IO[Option[(Restaurant, Location)]] = for {
-//      restaurantOption <- ioFetch(restaurantsDatalake, search)
-//      restaurant       <- restaurantOption
-//      locationOption   <- ioFetch(locationsDatalake, restaurant.area)
-//      location         <- locationOption
-//    } yield (restaurant, location)
-//
-//    io.attempt.unsafeRunSync()
-//  }
-
   // In pure FP, the effect and the business logic can be decoupled
   // i.e. we have composable programs that deal with values first, and we can run their effects later
   def ioFetch[K,V](dl: mutable.Map[K, V], key: K): OptionT[IO,V] =
@@ -88,7 +69,7 @@ object IOEffects {
   // 2 improvements: for comprehension makes it clearer, and `attempt` gives error handling
   def searchRestaurants(search: String): Either[Throwable, Option[(Restaurant, Coordinates)]] = {
     val io: OptionT[IO, (Restaurant, Coordinates)] = for {
-      restaurant <- ioFetch(restaurantsDatalake, search)
+      restaurant  <- ioFetch(restaurantsDatalake, search)
       coordinates <- ioFetch(locationsDatalake, restaurant.location)
     } yield (restaurant, coordinates)
 
@@ -99,7 +80,7 @@ object IOEffects {
   // Isolate the query from the last example and reuse it.. composability!
   def selectRestaurant(search: String): OptionT[IO, (Restaurant, Coordinates)] =
     for {
-      restaurant <- ioFetch(restaurantsDatalake, search)
+      restaurant  <- ioFetch(restaurantsDatalake, search)
       coordinates <- ioFetch(locationsDatalake, restaurant.location)
     } yield (restaurant, coordinates)
 
@@ -113,14 +94,14 @@ object IOEffects {
     } yield numInserted
 
 
-//  Bring it all together to search a restaurant then review it
-  def findAndReview(search: String): Either[Throwable, Option[Int]] = {
+  //  Bring it all together to search a restaurant then review it
+  def lazyReviewer(search: String, review: String): Either[Throwable, Option[Int]] = {
     val io: OptionT[IO, Int] = for {
       (restaurant, location) <- selectRestaurant(search)
       reviewsInserted <-
         if (location.lat > 40)
-          insertReview(restaurant, "Ugh, it was so far!")
-        else 0.pure[IO]
+          insertReview(restaurant, review)
+        else OptionT[IO, Int](IO(Some(0)))
     } yield reviewsInserted
 
     io.value.attempt.unsafeRunSync()
