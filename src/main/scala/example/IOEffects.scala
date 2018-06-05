@@ -31,6 +31,8 @@ object IOEffects {
     Restaurant("Babu Bhatt's", Location("Brooklyn")) -> List("They changed their entire menu!")
   )
 
+  def searchRestaurants(search: String): (Restaurant, Coordinates) = ???
+
   def fetch[K, V](bucket: mutable.Map[K, V], key: K): Option[V] = {
     Thread.sleep(1000)
     bucket.get(key)
@@ -42,24 +44,27 @@ object IOEffects {
     1
   }
 
-  def searchRestaurantsJava(search: String): (Restaurant, Coordinates) = {
-    var restaurant: Restaurant = null
-    var coordinates: Coordinates = null
+  def searchRestaurantsImperative(search: String): (Restaurant, Coordinates) = {
+    var restaurant: Option[Restaurant] = null
+    var coordinates: Option[Coordinates] = null
     try {
-      restaurant = fetch(restaurantsDatalake, search).get
-      if (restaurant != null) {
-        coordinates = fetch(locationsDatalake, restaurant.location).get
+      restaurant = fetch(restaurantsDatalake, search)
+      if (restaurant.isDefined) {
+        coordinates = fetch(locationsDatalake, restaurant.get.location)
       }
     } catch {
       case e: Exception => println("Fetch failed somewhere... we don't know")
     }
-    (restaurant, coordinates)
+    (restaurant.get, coordinates.get)
   }
 
-  // Example 1: Cats IO, fetch
-  // Unsafe means "use this at the end of the world"
-  // In pure FP, the effect and the business logic can be decoupled
-  // i.e. we have composable programs that deal with values first, and we can run their effects later
+  /* Example 1: Cats IO, fetch
+   * Unsafe means "use this at the end of the world"
+   * n pure FP, the effect and the business logic can be decoupled
+   * i.e. we have composable programs that deal with values first, and we can run their effects later
+   */
+
+  // For convenience and reuse, we will wrap the original API in IO and OptionT
   def ioFetch[K,V](dl: mutable.Map[K, V], key: K): OptionT[IO,V] =
     OptionT[IO,V](IO(fetch(dl, key)))
 
@@ -67,7 +72,7 @@ object IOEffects {
     IO(write(bucket, key, value))
 
   // 2 improvements: for comprehension makes it clearer, and `attempt` gives error handling
-  def searchRestaurants(search: String): Either[Throwable, Option[(Restaurant, Coordinates)]] = {
+  def searchRestaurantsFunctional(search: String): Either[Throwable, Option[(Restaurant, Coordinates)]] = {
     val io: OptionT[IO, (Restaurant, Coordinates)] = for {
       restaurant  <- ioFetch(restaurantsDatalake, search)
       coordinates <- ioFetch(locationsDatalake, restaurant.location)
@@ -76,16 +81,15 @@ object IOEffects {
     io.value.attempt.unsafeRunSync()
   }
 
-  // Example 2: Cats IO, fetch and write
-  // Isolate the query from the last example and reuse it.. composability!
+  // Example 2: Search a restaurant and review it based on distance.
+  // We can isolate the query from the last example and reuse it. Modularity!
   def selectRestaurant(search: String): OptionT[IO, (Restaurant, Coordinates)] =
     for {
       restaurant  <- ioFetch(restaurantsDatalake, search)
       coordinates <- ioFetch(locationsDatalake, restaurant.location)
     } yield (restaurant, coordinates)
 
-
-  // An insert statement to write a review
+  // A new insert statement to write a review.
   def insertReview(restaurant: Restaurant, review: String): IO[Int] =
     for {
       reviews     <- ioFetch(reviewsDatalake, restaurant).value
@@ -93,12 +97,12 @@ object IOEffects {
       numInserted <- ioWrite(reviewsDatalake, restaurant, insert)
     } yield numInserted
 
+  //  Bring it all together to search a restaurant then review it.
   def lazyReviewer(restaurant: Restaurant, coordinates: Coordinates): IO[Int] =
     if (coordinates.lat > 40)
       insertReview(restaurant, "Terrible restaurant, too far from me!")
     else 0.pure[IO]
 
-  //  Bring it all together to search a restaurant then review it
   def findAndReview(search: String): Either[Throwable, Option[Int]] = {
     val io: OptionT[IO, Int] = for {
       (restaurant, coordinates) <- selectRestaurant(search)
