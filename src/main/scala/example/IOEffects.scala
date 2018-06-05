@@ -45,8 +45,8 @@ object IOEffects {
   }
 
   def searchRestaurantsImperative(search: String): (Restaurant, Coordinates) = {
-    var restaurant: Option[Restaurant] = null
-    var coordinates: Option[Coordinates] = null
+    var restaurant: Option[Restaurant] = None
+    var coordinates: Option[Coordinates] = None
     try {
       restaurant = fetch(restaurantsDatalake, search)
       if (restaurant.isDefined) {

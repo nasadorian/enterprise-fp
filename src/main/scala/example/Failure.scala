@@ -63,12 +63,18 @@ object Failure {
     tryGrant.fold(t => Denied(t.getMessage), g => g)
   }
 
-  // Because the two `Try` not depend on each other, we can use a weaker combinator...
-  def signupFlowFunctional3(request: AccountRequest): AccountResponse =
-    Applicative[Try].map2(
-      Try(encrypt(request.pw, 10)), Try(validateEmail(request.email)))(
-        (encrypted, validEmail) => Granted(request.user, encrypted, validEmail)
+  /*
+   * Because the two `Try`s don't depend on each other
+   * we can use a weaker combinator...
+   * Look familiar? Closer to the imperative example.
+   */
+  def signupFlowFunctional3(request: AccountRequest): AccountResponse = {
+    val encrypted = Try(encrypt(request.pw, 10))
+    val validated = Try(validateEmail(request.email))
+    Applicative[Try].map2(encrypted, validated)(
+      (e, v) => Granted(request.user, e, v)
     ).fold(t => Denied(t.getMessage), g => g)
+  }
 
 
   // Example 2: We implement the functions ourselves or just wrap them
