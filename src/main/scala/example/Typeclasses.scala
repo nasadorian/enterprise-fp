@@ -11,7 +11,6 @@ object Typeclasses {
   }
 
   trait Monad[F[_]] extends Applicative[F] {
-    def pure[A](value: A): F[A]
     def flatMap[A, B](value: F[A])(func: A => F[B]): F[B]
   }
 }
