@@ -45,15 +45,23 @@ object Partiality {
   def listStopsFunctional(name: String): String =
     personLocation.get(name)
       .flatMap(locationTransit.get)
-      .map(_.reduce(_ + ", " + _))
-      .getOrElse("User or stops not found!")
+      .fold("User or stops not found!")(_.mkString(","))
 
-  // Using fold to compute the last step
-  def listStopsFunctional2(name: String): String =
-    personLocation.get(name)
-      .flatMap(locationTransit.get)
-      .fold("User or stops not found!")(
-        _.reduce(_ + ", " + _))
+  // Using the for-comprehension syntax sugar
+  def listStopsSugar(name: String): Option[String] =
+    for {
+      location <- personLocation.get(name)
+      transit  <- locationTransit.get(location)
+    } yield transit.mkString(",")
+
+  def listStops2(name: String): String = listStopsSugar(name).getOrElse("Not found!")
+
+  //scala> listStopsFunctionalSugar("Jerry Seinfeld")
+  //res0: String = J,Z
+
+  //scala> listStopsFunctionalSugar("Newman")
+  //res1: String = Not found!
+
 }
 
 
