@@ -57,8 +57,9 @@ object IOEffects {
   def searchAndReview(search: String, p: Restaurant => Boolean, review: Review): IO[Int] =
     for {
       restaurant  <- searchRestaurants(search).value
-      inserted    <- restaurant.fold(0.pure[IO])(
-        r => if (p(r)) insertReview(r, review) else 0.pure[IO])
+      inserted    <- restaurant
+                       .filter(p)
+                       .fold(0.pure[IO])(insertReview(_, review))
     } yield inserted
 
   // A final tidbit using Traverse, which flips inner and outer layers
